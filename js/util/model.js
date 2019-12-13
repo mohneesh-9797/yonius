@@ -69,8 +69,8 @@ export const VALUE_METHODS = {
     contains: (v, t) => v.split(";")
 };
 
-export const find = function(params, collection, modelClass) {
-    _findS(params, modelClass);
+export const find = function(params, collection) {
+    _findS(params);
     _findD(params);
 
     const { skip = 0, limit = 0, sort = null } = params;
@@ -81,15 +81,6 @@ export const find = function(params, collection, modelClass) {
         limit: limit,
         sort: sort
     });
-};
-
-export const getDefault = function(modelClass) {
-    return (Object.entries(modelClass.schema)
-        .findOne(([name, definition]) => definition.default) || {}).name || null;
-};
-
-export const getDefinitionN = function(name, modelClass) {
-    return modelClass.schema[name];
 };
 
 const _findD = function(params) {
@@ -128,32 +119,29 @@ const _findD = function(params) {
         const result = filter.split(":", 3);
         if (result.length === 2) result.push(null);
 
-        // unpacks the result into it's thee components name, operatior
-        // and value to be used in the parsing of the filter
         const [name, operator, value] = result;
-
-        // retrieves the definition for the filter attribute and uses
-        // it to retrieve it's target data type that is going to be
-        // used for the proper conversion, note that in case the base
-        // type resolution method exists it's used (recursive resolution)
-        const nameDefinition = getDefinitionN(name);
-        const nameT = nameDefinition._btype || nameDefinition.type || String;
 
         // determines if the current filter operation should be performed
         // using a case insensitive based approach to the search, by default
         // all of the operations are considered to be case sensitive
         const insensitive = INSENSITIVE[operator] || false;
 
+        // retrieves the definition for the filter attribute and uses
+        // it to retrieve it's target data type that is going to be
+        // used for the proper conversion, note that in case the base
+        // type resolution method exists it's used (recursive resolution)
+        const nameT = v => v;
+
         // retrieves the method that is going to be used for value mapping
         // or conversion based on the current operator and then converts
         // the operator into the domain specific operator
-        const valueMethod = VALUE_METHODS[operator];
+        const valueMethod = VALUE_METHODS[operator] || (v => v);
         const _operator = OPERATORS[operator] === undefined ? operator : OPERATORS[operator];
 
         // in case there's a custom value mapped retrieved uses it to convert
         // the string based value into the target specific value for the query
         // otherwise uses the data type for the search field for value conversion
-        let _value = valueMethod ? valueMethod(value, nameT) : nameT(value);
+        const _value = valueMethod(value, nameT);
 
         // constructs the custom find value using a key and value map value
         // in case the operator is defined otherwise (operator not defined)
@@ -173,7 +161,7 @@ const _findD = function(params) {
     }
 };
 
-const _findS = function(params, modelClass) {
+const _findS = function(params) {
     // tries to retrieve the find name value from the provided
     // named arguments defaulting to an unset value otherwise
     const findN = params.find_n;
@@ -209,7 +197,7 @@ const _findS = function(params, modelClass) {
     // to be the default (representation) for the model in case
     // there's none returns immediately, as it's not possible
     // to proceed with the filter creation
-    const defaultName = findN || getDefault(modelClass);
+    const defaultName = findN; // TODO: findN || cls.default()
     if (!defaultName) return;
 
     // constructs the proper right and left parts of the regex
@@ -221,7 +209,7 @@ const _findS = function(params, modelClass) {
     // retrieves the definition for the default attribute and uses
     // it to retrieve it's target data type, defaulting to the
     // string type in case none is defined in the schema
-    const defaultT = getDefinitionN(defaultName, modelClass).type || String;
+    const defaultT = "string"; // TODO: cls.definition_n(default).get("type", legacy.UNICODE)
 
     let findV;
 
@@ -229,7 +217,7 @@ const _findS = function(params, modelClass) {
         // in case the target date type for the default field is
         // string the both sides wildcard regex is used for the
         // search
-        if (defaultT === String) {
+        if (defaultT === "string") {
             findV = {
                 $regex: right + escapeStringRegexp(findS) + left,
                 $options: findI ? "-i" : ""
