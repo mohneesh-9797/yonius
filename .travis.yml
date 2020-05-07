@@ -1,4 +1,7 @@
 dist: trusty
+arch : 
+    - amd64
+    - arm64
 language: node_js
 node_js:
   - "10"
